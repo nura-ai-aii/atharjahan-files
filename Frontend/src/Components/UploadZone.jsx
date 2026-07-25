@@ -95,34 +95,41 @@ export default function UploadZone({ currentFolderId, onUploadComplete }) {
     formData.append('duplicateAction', duplicateAction);
 
     const startTime = Date.now();
+    let lastUpdateTimestamp = 0; // Throttle state updates
 
     try {
       await api.post('/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
+          const now = Date.now();
           const totalBytes = progressEvent.total || queueItem.file.size || 1;
           const loadedBytes = progressEvent.loaded;
           const percentCompleted = Math.min(99, Math.round((loadedBytes * 100) / totalBytes));
           
-          const loadedStr = formatSize(loadedBytes).replace(/ (MB|GB)/, '');
-          const totalStr = formatSize(totalBytes);
-          
-          // Real-Time Speed & ETA Calculation
-          const elapsedSecs = Math.max(0.1, (Date.now() - startTime) / 1000);
-          const bytesPerSec = loadedBytes / elapsedSecs;
-          const speedStr = (bytesPerSec / (1024 * 1024)).toFixed(2) + ' MB/s';
-          const remainingSecs = (totalBytes - loadedBytes) / Math.max(1, bytesPerSec);
+          // THROTTLE: Only update React state 3 times a second (every 333ms) or if at 100% to save browser CPU/RAM!
+          if (now - lastUpdateTimestamp > 333 || percentCompleted >= 99) {
+            lastUpdateTimestamp = now;
+            
+            const loadedStr = formatSize(loadedBytes).replace(/ (MB|GB)/, '');
+            const totalStr = formatSize(totalBytes);
+            
+            // Real-Time Speed & ETA Calculation
+            const elapsedSecs = Math.max(0.1, (now - startTime) / 1000);
+            const bytesPerSec = loadedBytes / elapsedSecs;
+            const speedStr = (bytesPerSec / (1024 * 1024)).toFixed(2) + ' MB/s';
+            const remainingSecs = (totalBytes - loadedBytes) / Math.max(1, bytesPerSec);
 
-          setUploadQueue(prev => prev.map(q => 
-            q.id === queueItem.id ? { 
-              ...q, 
-              progress: percentCompleted, 
-              loadedMb: loadedStr, 
-              totalMb: totalStr,
-              speedMbs: speedStr,
-              etaSeconds: remainingSecs
-            } : q
-          ));
+            setUploadQueue(prev => prev.map(q => 
+              q.id === queueItem.id ? { 
+                ...q, 
+                progress: percentCompleted, 
+                loadedMb: loadedStr, 
+                totalMb: totalStr,
+                speedMbs: speedStr,
+                etaSeconds: remainingSecs
+              } : q
+            ));
+          }
         }
       });
 
@@ -133,7 +140,7 @@ export default function UploadZone({ currentFolderId, onUploadComplete }) {
         progress: 100, 
         loadedMb: finalStr.replace(/ (MB|GB)/, ''), 
         totalMb: finalStr,
-        speedMbs: '⚡ Saved Instantly',
+        speedMbs: '⚡ Saved',
         etaSeconds: 0
       } : q));
       if (onUploadComplete) onUploadComplete();
@@ -146,7 +153,15 @@ export default function UploadZone({ currentFolderId, onUploadComplete }) {
           checksum: err.response.data.checksum
         });
       } else {
-        const msg = err.response?.data?.error || 'Network stream interrupted';
+        // SANITIZE ERRORS: Prevent giant HTML proxy error pages (like 413 Payload Too Large) from crashing the React DOM!
+        let msg = 'Network stream interrupted';
+        if (err.response?.status === 413) {
+          msg = 'File exceeds maximum upload size (413 Payload Too Large)';
+        } else if (err.response?.data?.error) {
+          msg = typeof err.response.data.error === 'string' ? err.response.data.error.substring(0, 100) : 'Server Error';
+        } else if (err.message) {
+          msg = err.message.substring(0, 100);
+        }
         setUploadQueue(prev => prev.map(q => q.id === queueItem.id ? { ...q, status: 'error', errorMessage: msg, progress: 0 } : q));
       }
     }
