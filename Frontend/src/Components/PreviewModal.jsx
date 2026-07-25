@@ -68,7 +68,8 @@ export default function PreviewModal({ file, onClose }) {
 
   if (!file) return null;
 
-  const previewUrl = `/api/file/${file._id}/preview`;
+  const baseUrl = import.meta.env.VITE_API_URL || '/api';
+  const previewUrl = `${baseUrl}/file/${file._id}/preview`;
   const ext = file.filename.split('.').pop()?.toLowerCase() || '';
 
   const handleDownload = async () => {

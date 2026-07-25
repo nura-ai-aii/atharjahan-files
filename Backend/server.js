@@ -31,7 +31,7 @@ app.use(helmet({
 
 // CORS Configuration with credential support for React + Vite Frontend
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173', process.env.FRONTEND_URL || 'http://localhost:5173'],
+  origin: true, // Dynamically permit deployed Vercel domains & localhost clients
   credentials: true,
   methods: ['GET', 'POST'], // NO DELETE or PUT allowed per zero-deletion security mandate
   allowedHeaders: ['Content-Type', 'Authorization']
