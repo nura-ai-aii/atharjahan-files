@@ -2,7 +2,7 @@ import File from '../Models/File.js';
 import Folder from '../Models/Folder.js';
 import AuditLog from '../Models/AuditLog.js';
 import { detectCategory } from './categoryDetector.js';
-import { computeSha256, verifyFileSignature, uploadToStorage, getFileStream } from './storageController.js';
+import { computeSha256, verifyFileSignature, uploadToStorage, getFileStream, deleteFromStorage } from './storageController.js';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -234,3 +234,53 @@ export async function previewFile(req, res) {
     return res.status(500).json({ error: 'Failed to stream file preview.' });
   }
 }
+
+/**
+ * Selective Batch File Deletion for Settings Storage Manager
+ */
+export async function batchDeleteFiles(req, res) {
+  try {
+    const { fileIds } = req.body;
+    if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
+      return res.status(400).json({ error: 'No files specified for deletion.' });
+    }
+
+    const filesToDelete = await File.find({ _id: { $in: fileIds } });
+    if (filesToDelete.length === 0) {
+      return res.status(404).json({ error: 'Selected files were not found in database.' });
+    }
+
+    let totalDeletedBytes = 0;
+    const deletedCount = filesToDelete.length;
+
+    // Securely delete each item from vault disk / cloud storage
+    for (const file of filesToDelete) {
+      try {
+        await deleteFromStorage(file.storageKey);
+        totalDeletedBytes += (file.size || 0);
+      } catch (err) {
+        console.error(`Warning: Failed to delete storage object ${file.storageKey}:`, err);
+      }
+    }
+
+    // Remove metadata records from MongoDB
+    await File.deleteMany({ _id: { $in: fileIds } });
+
+    // Audit Log record for security transparency
+    await AuditLog.create({
+      action: 'delete_files',
+      details: `Batch deleted ${deletedCount} file(s) freeing ${(totalDeletedBytes / (1024 * 1024)).toFixed(2)} MB of vault storage`,
+      ip: req.ip
+    });
+
+    return res.status(200).json({
+      message: `Successfully deleted ${deletedCount} file(s) and reclaimed ${(totalDeletedBytes / (1024 * 1024)).toFixed(2)} MB of server space!`,
+      deletedIds: fileIds,
+      freedBytes: totalDeletedBytes
+    });
+  } catch (err) {
+    console.error('Batch delete error:', err);
+    return res.status(500).json({ error: 'Failed to complete selective deletion operation.' });
+  }
+}
+

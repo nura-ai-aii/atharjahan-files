@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import crypto from 'crypto';
 import { authenticateToken, login, changePassword } from '../Controllers/authController.js';
-import { handleFileUpload, listFiles, getFileDetails, downloadFile, previewFile } from '../Controllers/fileController.js';
+import { handleFileUpload, listFiles, getFileDetails, downloadFile, previewFile, batchDeleteFiles } from '../Controllers/fileController.js';
 import { createFolder, getFolderBreadcrumbs, getDashboardStats } from '../Controllers/folderController.js';
 import { getSettings, saveSettings, getAuditLogs } from '../Controllers/settingsController.js';
 import { STAGING_DIR } from '../Controllers/storageController.js';
@@ -59,6 +59,7 @@ router.get('/files', listFiles);
 router.get('/file/:id', getFileDetails);
 router.get('/file/:id/download', downloadFile);
 router.get('/file/:id/preview', previewFile);
+router.post('/files/delete', batchDeleteFiles); // Selective batch file deletion for Settings Storage Quota Manager
 
 // Administration Settings & Security Audit Logs
 router.get('/settings', getSettings);

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { fileTypeFromFile } from 'file-type';
 import dotenv from 'dotenv';
@@ -119,6 +119,30 @@ export async function getFileStream(storageKey) {
       throw new Error('File not found in storage vault.');
     }
     return fs.createReadStream(localPath);
+  }
+}
+
+/**
+ * Securely delete file blob from cloud vault or internal disk storage with strict boundary fencing
+ */
+export async function deleteFromStorage(storageKey) {
+  if (!storageKey) return;
+  if (s3Client) {
+    const command = new DeleteObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: storageKey
+    });
+    await s3Client.send(command);
+  } else {
+    const targetPath = path.resolve(LOCAL_STORAGE_DIR, storageKey);
+    const vaultRoot = path.resolve(LOCAL_STORAGE_DIR);
+    // Strict security guard against directory traversal outside Backend/Uploads
+    if (!targetPath.startsWith(vaultRoot)) {
+      throw new Error('Security Exception: Attempted file deletion outside internal vault boundaries.');
+    }
+    if (fs.existsSync(targetPath)) {
+      fs.unlinkSync(targetPath);
+    }
   }
 }
 
