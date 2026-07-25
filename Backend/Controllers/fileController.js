@@ -78,13 +78,13 @@ export async function handleFileUpload(req, res) {
       folderId
     });
 
-    // 8. Log audit trail
-    await AuditLog.create({
+    // 8. Log audit trail asynchronously (fire-and-forget) to eliminate MongoDB write-acknowledgement latency!
+    AuditLog.create({
       action: 'upload',
       fileId: fileDoc._id,
       details: `Uploaded ${finalFilename} (${size} bytes, Category: ${category})`,
       ip: req.ip
-    });
+    }).catch(err => console.error('Non-critical AuditLog write failed:', err.message));
 
     return res.status(201).json({
       status: 'success',
