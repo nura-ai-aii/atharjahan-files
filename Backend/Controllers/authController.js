@@ -75,11 +75,11 @@ export async function login(req, res) {
     // Log security event
     await AuditLog.create({ action: 'login', details: 'Successful master password authentication', ip });
 
-    // Set secure HTTP-only cookie
+    // Set secure HTTP-only cookie compatible with cross-domain Vercel <-> Render setups
     res.cookie('jwt_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: true,
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: JWT_EXPIRY_HOURS * 3600 * 1000
     });
 
@@ -90,7 +90,10 @@ export async function login(req, res) {
     });
   } catch (err) {
     console.error('Login Error:', err);
-    return res.status(500).json({ error: 'Internal system authentication failure.' });
+    if (err.name === 'MongooseError' || err.name === 'MongoNetworkError' || (err.message && (err.message.includes('buffering timed out') || err.message.includes('failed to connect')))) {
+      return res.status(503).json({ error: 'Database connection error. Please ensure your MongoDB Atlas IP Access List is set to 0.0.0.0/0 (Allow access from anywhere).' });
+    }
+    return res.status(500).json({ error: `Authentication service exception: ${err.message || 'Internal error'}` });
   }
 }
 
