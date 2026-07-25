@@ -32,7 +32,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: {
-    fileSize: 2000 * 1024 * 1024 // 2 GB ceiling for large ISO, APK, video streams
+    fileSize: 10000 * 1024 * 1024 // 10 GB ceiling for large batches and >3GB multi-media sets
   }
 });
 

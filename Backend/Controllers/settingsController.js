@@ -13,7 +13,7 @@ export async function getSettings(req, res) {
     if (!settings) {
       settings = await Settings.create({
         key: 'system_settings',
-        uploadLimitMb: parseInt(process.env.UPLOAD_LIMIT_MB || '2000', 10),
+        uploadLimitMb: parseInt(process.env.UPLOAD_LIMIT_MB || '10000', 10),
         defaultTheme: 'simple-white',
         jwtExpiryHours: parseInt(process.env.JWT_EXPIRY_HOURS || '24', 10),
         storageQuotaGb: 50
