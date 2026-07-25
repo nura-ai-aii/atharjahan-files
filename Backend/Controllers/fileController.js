@@ -200,7 +200,7 @@ export async function downloadFile(req, res) {
 
     await AuditLog.create({ action: 'download', fileId: file._id, details: `Downloaded ${file.filename}`, ip: req.ip });
 
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.originalName)}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.originalName || file.filename)}"`);
     res.setHeader('Content-Type', file.mimeType);
     res.setHeader('Accept-Ranges', 'bytes');
     
@@ -216,7 +216,10 @@ export async function downloadFile(req, res) {
     stream.pipe(res);
   } catch (err) {
     console.error('Download stream error:', err);
-    return res.status(500).json({ error: 'Failed to stream download from vault storage.' });
+    const msg = err.message === 'File not found in storage vault.' 
+      ? 'File missing from server disk. (If using Render Free Tier, the ephemeral disk is wiped during every code deploy. Please re-upload the file.)' 
+      : 'Failed to stream download from vault storage.';
+    return res.status(500).json({ error: msg, details: err.message });
   }
 }
 
@@ -233,7 +236,7 @@ export async function previewFile(req, res) {
     const range = req.headers.range;
     const { stream, contentLength, contentRange, totalSize } = await getFileStream(file.storageKey, range);
 
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.originalName)}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.originalName || file.filename)}"`);
     res.setHeader('Content-Type', file.mimeType);
     res.setHeader('Accept-Ranges', 'bytes');
 
@@ -249,7 +252,10 @@ export async function previewFile(req, res) {
     stream.pipe(res);
   } catch (err) {
     console.error('Preview stream error:', err);
-    return res.status(500).json({ error: 'Failed to stream file preview.' });
+    const msg = err.message === 'File not found in storage vault.' 
+      ? 'File missing from server disk. (If using Render Free Tier, the ephemeral disk is wiped during every code deploy. Please re-upload the file.)' 
+      : 'Failed to stream file preview.';
+    return res.status(500).json({ error: msg, details: err.message });
   }
 }
 
