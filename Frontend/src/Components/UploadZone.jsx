@@ -314,117 +314,143 @@ export default function UploadZone({ currentFolderId, onUploadComplete }) {
 
           {/* Individual File Percentages & Speed Metrics */}
           <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', justifyContent: 'space-between' }}>
-            <span>Individual File Status & Percentage:</span>
+            <span>Active Transfer Details (Smart View):</span>
             <span style={{ color: '#60a5fa', textTransform: 'none' }}>⚡ Adaptive Multi-Stream Enabled</span>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem', maxHeight: '380px', overflowY: 'auto' }}>
-            {uploadQueue.map((item, index) => (
-              <div
-                key={item.id}
-                style={{
-                  padding: '1rem',
-                  backgroundColor: '#0f172a',
-                  borderRadius: '8px',
-                  border: item.status === 'uploading' ? '1px solid #3b82f6' : '1px solid #334155',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.625rem'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: '1', minWidth: 0 }}>
-                    <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700, width: '28px' }}>
-                      #{index + 1}
-                    </span>
-                    <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }}>
-                      {item.file.name}
-                    </span>
-                    <span style={{ fontSize: '0.825rem', color: '#94a3b8', fontWeight: 600 }}>
-                      ({item.loadedMb && item.status === 'uploading' ? `${item.loadedMb} / ${item.totalMb}` : item.totalMb})
-                    </span>
-                  </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem', maxHeight: '420px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+            {/* SMART DOM RENDERING: Prevents browser White Screen by limiting DOM nodes to only active items! */}
+            {(() => {
+              const active = uploadQueue.filter(q => q.status === 'uploading' || q.status === 'error' || q.status === 'waiting_duplicate');
+              const queued = uploadQueue.filter(q => q.status === 'queued');
+              const done = uploadQueue.filter(q => q.status === 'done');
+              
+              const visibleItems = [
+                ...active,
+                ...queued.slice(0, Math.max(0, 16 - active.length)), // Fill empty slots with queued items
+                ...done.slice(-2) // Show only the last 2 completed items to save memory
+              ];
 
-                  {/* Dynamic Percentage, Velocity Readout & ETA for EVERY file */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    {item.status === 'queued' && (
-                      <span style={{ backgroundColor: '#334155', color: '#cbd5e1', padding: '0.25rem 0.7rem', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <Clock size={15} color="#94a3b8" /> 0% (In Queue...)
-                      </span>
-                    )}
-                    {item.status === 'uploading' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '0.785rem', backgroundColor: '#065f46', color: '#a7f3d0', padding: '0.2rem 0.55rem', borderRadius: '6px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          🚀 {item.speedMbs} | ETA: {formatTime(item.etaSeconds)}
-                        </span>
-                        <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#60a5fa', minWidth: '42px', textAlign: 'right' }}>
-                          {item.progress}%
-                        </span>
-                      </div>
-                    )}
-                    {item.status === 'done' && (
-                      <span style={{ backgroundColor: '#064e3b', color: '#6ee7b7', padding: '0.25rem 0.75rem', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 800, fontSize: '0.85rem' }}>
-                        <CheckCircle2 size={16} color="#10b981" /> 100% COMPLETED ✅
-                      </span>
-                    )}
-                    {item.status === 'error' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ backgroundColor: '#7f1d1d', color: '#fca5a5', padding: '0.25rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>
-                          ❌ 0% ({item.errorMessage})
-                        </span>
-                        <button onClick={() => uploadSingleFile(item, 'ask')} style={{ backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.25rem 0.5rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <RefreshCw size={12} /> Retry
-                        </button>
-                      </div>
-                    )}
-                    {item.status === 'waiting_duplicate' && (
-                      <span style={{ backgroundColor: '#78350f', color: '#fde68a', padding: '0.25rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                        <AlertTriangle size={15} color="#f59e0b" /> Duplicate File Action Required
-                      </span>
-                    )}
-
-                    <button
-                      onClick={() => removeQueueItem(item.id)}
-                      style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.2rem' }}
-                      title="Remove from queue"
+              return (
+                <>
+                  {visibleItems.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        padding: '1rem',
+                        backgroundColor: '#0f172a',
+                        borderRadius: '8px',
+                        border: item.status === 'uploading' ? '1px solid #3b82f6' : '1px solid #334155',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.625rem'
+                      }}
                     >
-                      <X size={18} />
-                    </button>
-                  </div>
-                </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: '1', minWidth: 0 }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }}>
+                            {item.file.name}
+                          </span>
+                          <span style={{ fontSize: '0.825rem', color: '#94a3b8', fontWeight: 600 }}>
+                            ({item.loadedMb && item.status === 'uploading' ? `${item.loadedMb} / ${item.totalMb}` : item.totalMb})
+                          </span>
+                        </div>
 
-                {/* Individual Progress Bar */}
-                <div style={{ width: '100%', height: '14px', backgroundColor: '#334155', borderRadius: '7px', overflow: 'hidden', position: 'relative', border: '1px solid #475569' }}>
-                  <div style={{
-                    width: `${item.progress}%`,
-                    height: '100%',
-                    background: item.status === 'done'
-                      ? 'linear-gradient(90deg, #10b981, #059669)'
-                      : item.status === 'error'
-                      ? '#ef4444'
-                      : 'linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa)',
-                    borderRadius: '7px',
-                    transition: 'width 250ms ease-out'
-                  }} />
-                  {item.progress >= 15 && (
-                    <span style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      height: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      fontSize: '0.685rem',
-                      fontWeight: 800,
-                      color: '#ffffff',
-                      textShadow: '0 1px 2px rgba(0,0,0,0.8)'
-                    }}>
-                      {item.progress}%
-                    </span>
+                        {/* Dynamic Percentage, Velocity Readout & ETA for EVERY file */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          {item.status === 'queued' && (
+                            <span style={{ backgroundColor: '#334155', color: '#cbd5e1', padding: '0.25rem 0.7rem', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <Clock size={15} color="#94a3b8" /> 0% (In Queue...)
+                            </span>
+                          )}
+                          {item.status === 'uploading' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '0.785rem', backgroundColor: '#065f46', color: '#a7f3d0', padding: '0.2rem 0.55rem', borderRadius: '6px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                🚀 {item.speedMbs} | ETA: {formatTime(item.etaSeconds)}
+                              </span>
+                              <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#60a5fa', minWidth: '42px', textAlign: 'right' }}>
+                                {item.progress}%
+                              </span>
+                            </div>
+                          )}
+                          {item.status === 'done' && (
+                            <span style={{ backgroundColor: '#064e3b', color: '#6ee7b7', padding: '0.25rem 0.75rem', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 800, fontSize: '0.85rem' }}>
+                              <CheckCircle2 size={16} color="#10b981" /> 100% COMPLETED ✅
+                            </span>
+                          )}
+                          {item.status === 'error' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ backgroundColor: '#7f1d1d', color: '#fca5a5', padding: '0.25rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>
+                                ❌ 0% ({item.errorMessage})
+                              </span>
+                              <button onClick={() => uploadSingleFile(item, 'ask')} style={{ backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.25rem 0.5rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                <RefreshCw size={12} /> Retry
+                              </button>
+                            </div>
+                          )}
+                          {item.status === 'waiting_duplicate' && (
+                            <span style={{ backgroundColor: '#78350f', color: '#fde68a', padding: '0.25rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <AlertTriangle size={15} color="#f59e0b" /> Duplicate File Action Required
+                            </span>
+                          )}
+
+                          <button
+                            onClick={() => removeQueueItem(item.id)}
+                            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.2rem' }}
+                            title="Remove from queue"
+                          >
+                            <X size={18} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Individual Progress Bar */}
+                      <div style={{ width: '100%', height: '14px', backgroundColor: '#334155', borderRadius: '7px', overflow: 'hidden', position: 'relative', border: '1px solid #475569' }}>
+                        <div style={{
+                          width: `${item.progress}%`,
+                          height: '100%',
+                          background: item.status === 'done'
+                            ? 'linear-gradient(90deg, #10b981, #059669)'
+                            : item.status === 'error'
+                            ? '#ef4444'
+                            : 'linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa)',
+                          borderRadius: '7px',
+                          transition: 'width 250ms ease-out'
+                        }} />
+                        {item.progress >= 15 && (
+                          <span style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            height: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            fontSize: '0.685rem',
+                            fontWeight: 800,
+                            color: '#ffffff',
+                            textShadow: '0 1px 2px rgba(0,0,0,0.8)'
+                          }}>
+                            {item.progress}%
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* Smart Aggregation Summary Row for remaining hidden items */}
+                  {queued.length > 16 && (
+                    <div style={{ padding: '1rem', backgroundColor: '#1e293b', borderRadius: '8px', border: '1px dashed #475569', textAlign: 'center', color: '#94a3b8', fontWeight: 600, fontSize: '0.9rem' }}>
+                      + {queued.length - 16} more files waiting in high-speed queue...
+                    </div>
                   )}
-                </div>
-              </div>
-            ))}
+                  {done.length > 2 && (
+                    <div style={{ padding: '0.75rem', backgroundColor: '#064e3b', borderRadius: '8px', border: '1px solid #059669', textAlign: 'center', color: '#6ee7b7', fontWeight: 700, fontSize: '0.85rem' }}>
+                      ✓ {done.length - 2} previously completed uploads hidden to save memory
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
