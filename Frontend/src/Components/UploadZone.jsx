@@ -67,15 +67,16 @@ export default function UploadZone({ currentFolderId, onUploadComplete }) {
     setUploadQueue(prev => [...prev, ...newQueueItems]);
   };
 
-  // ULTRA-STABLE RELIABILITY SUPERVISOR (User Request: "I not want fast, I want avoid white screen")
-  // Processes a maximum of 2 files at a time. This guarantees zero browser freezes, zero network timeouts, and total stability!
+  // ADAPTIVE HIGH-SPEED SUPERVISOR (User Request: "little bit fast for 5Gb totally")
+  // Processes 8 files at a time for fast batching, scaling down to 1 if a massive file is detected!
   useEffect(() => {
     const activeUploads = uploadQueue.filter(q => q.status === 'uploading');
     const hasWaitingDuplicate = uploadQueue.some(q => q.status === 'waiting_duplicate');
     if (hasWaitingDuplicate) return;
 
-    // Ultra-safe max concurrency: Only ever upload 2 files simultaneously to protect browser memory!
-    const maxConcurrency = 2;
+    // Adaptive speed: 8 simultaneous uploads for blazing speed, 1 for massive files to protect memory!
+    const hasHugeActive = activeUploads.some(q => q.file?.size >= 150 * 1024 * 1024);
+    const maxConcurrency = hasHugeActive ? 1 : 8;
 
     if (activeUploads.length < maxConcurrency) {
       const nextItem = uploadQueue.find(q => q.status === 'queued');
