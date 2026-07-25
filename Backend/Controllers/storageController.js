@@ -11,7 +11,7 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const LOCAL_STORAGE_DIR = path.resolve(__dirname, '../../Uploads');
+const LOCAL_STORAGE_DIR = path.resolve(__dirname, '../Uploads');
 const STAGING_DIR = path.join(LOCAL_STORAGE_DIR, '.staging');
 
 // Ensure storage directories exist without touching root user files
