@@ -131,20 +131,30 @@ export async function uploadToStorage(filePath, storageKey, mimeType) {
 /**
  * Get readable streaming pipe from R2/S3 or local storage for downloads & previews
  */
-export async function getFileStream(storageKey) {
+export async function getFileStream(storageKey, range) {
   if (s3Client) {
-    const command = new GetObjectCommand({
-      Bucket: S3_BUCKET,
-      Key: storageKey
-    });
+    const params = { Bucket: S3_BUCKET, Key: storageKey };
+    if (range) params.Range = range;
+    const command = new GetObjectCommand(params);
     const response = await s3Client.send(command);
-    return response.Body; // Node.js stream
+    return { stream: response.Body, contentLength: response.ContentLength, contentRange: response.ContentRange };
   } else {
     const localPath = path.join(LOCAL_STORAGE_DIR, storageKey);
     if (!fs.existsSync(localPath)) {
       throw new Error('File not found in storage vault.');
     }
-    return fs.createReadStream(localPath);
+    
+    if (range) {
+      const stat = fs.statSync(localPath);
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+      const chunksize = (end - start) + 1;
+      const stream = fs.createReadStream(localPath, { start, end });
+      return { stream, contentLength: chunksize, contentRange: `bytes ${start}-${end}/${stat.size}`, totalSize: stat.size };
+    }
+    
+    return { stream: fs.createReadStream(localPath), totalSize: fs.statSync(localPath).size };
   }
 }
 

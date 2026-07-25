@@ -195,14 +195,23 @@ export async function downloadFile(req, res) {
       return res.status(404).json({ error: 'Requested file is no longer available.' });
     }
 
-    const stream = await getFileStream(file.storageKey);
+    const range = req.headers.range;
+    const { stream, contentLength, contentRange, totalSize } = await getFileStream(file.storageKey, range);
 
     await AuditLog.create({ action: 'download', fileId: file._id, details: `Downloaded ${file.filename}`, ip: req.ip });
 
-    // Set precise headers for uncorrupted original filename & extension download
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.originalName)}"`);
     res.setHeader('Content-Type', file.mimeType);
-    res.setHeader('Content-Length', file.size);
+    res.setHeader('Accept-Ranges', 'bytes');
+    
+    if (range && contentRange) {
+      res.status(206);
+      res.setHeader('Content-Range', contentRange);
+      res.setHeader('Content-Length', contentLength);
+    } else {
+      res.status(200);
+      res.setHeader('Content-Length', totalSize || file.size);
+    }
 
     stream.pipe(res);
   } catch (err) {
@@ -221,12 +230,21 @@ export async function previewFile(req, res) {
       return res.status(404).json({ error: 'File not found.' });
     }
 
-    const stream = await getFileStream(file.storageKey);
+    const range = req.headers.range;
+    const { stream, contentLength, contentRange, totalSize } = await getFileStream(file.storageKey, range);
 
-    // Set inline content disposition so browser displays rather than saving to disk
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.originalName)}"`);
     res.setHeader('Content-Type', file.mimeType);
-    res.setHeader('Content-Length', file.size);
+    res.setHeader('Accept-Ranges', 'bytes');
+
+    if (range && contentRange) {
+      res.status(206);
+      res.setHeader('Content-Range', contentRange);
+      res.setHeader('Content-Length', contentLength);
+    } else {
+      res.status(200);
+      res.setHeader('Content-Length', totalSize || file.size);
+    }
 
     stream.pipe(res);
   } catch (err) {

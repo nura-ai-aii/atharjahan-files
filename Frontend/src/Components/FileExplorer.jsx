@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   FileText, Folder as FolderIcon, Image, Table, Video, Music, Package, 
-  Code, File, Eye, Download, Info, ArrowUp, ArrowDown, Grid, List, Minimize 
+  Code, File, Eye, Download, ArrowUp, ArrowDown, Grid, List, Minimize 
 } from 'lucide-react';
 import api from '../utils/api.js';
 
@@ -18,18 +18,21 @@ export default function FileExplorer({
   onOpenPreview 
 }) {
 
+  const baseUrl = import.meta.env.VITE_API_URL || 'https://atharjahan-files.onrender.com/api';
+  const token = localStorage.getItem('pce_token');
+
   // Helper to get matching file type icon
-  const getFileIcon = (category, filename = '') => {
+  const getFileIcon = (category, filename = '', size = 24) => {
     switch (category) {
-      case 'Images': return <Image size={24} color="#d97706" />;
-      case 'PDFs': return <FileText size={24} color="#dc2626" />;
-      case 'Excel': return <Table size={24} color="#16a34a" />;
-      case 'Word': return <FileText size={24} color="#2563eb" />;
-      case 'Videos': return <Video size={24} color="#7c3aed" />;
-      case 'Audio': return <Music size={24} color="#ec4899" />;
-      case 'ZIP': return <Package size={24} color="#854d0e" />;
-      case 'Text': return <Code size={24} color="#0284c7" />;
-      default: return <File size={24} color="var(--text-muted)" />;
+      case 'Images': return <Image size={size} color="#d97706" />;
+      case 'PDFs': return <FileText size={size} color="#dc2626" />;
+      case 'Excel': return <Table size={size} color="#16a34a" />;
+      case 'Word': return <FileText size={size} color="#2563eb" />;
+      case 'Videos': return <Video size={size} color="#7c3aed" />;
+      case 'Audio': return <Music size={size} color="#ec4899" />;
+      case 'ZIP': return <Package size={size} color="#854d0e" />;
+      case 'Text': return <Code size={size} color="#0284c7" />;
+      default: return <File size={size} color="var(--text-muted)" />;
     }
   };
 
@@ -50,23 +53,60 @@ export default function FileExplorer({
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  const handleDownload = async (file) => {
-    try {
-      const response = await api.get(`/file/${file._id}/download`, {
-        responseType: 'blob'
-      });
-      
-      const blob = new Blob([response.data], { type: file.mimeType });
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.setAttribute('download', file.originalName || file.filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(downloadUrl);
-    } catch (err) {
-      alert('Download stream interrupted - please try again.');
+  const handleDownload = (file) => {
+    // SECURITY & PERFORMANCE FIX: Native browser download prevents memory crashing for massive files
+    const downloadUrl = `${baseUrl}/file/${file._id}/download?token=${token}`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.setAttribute('download', file.originalName || file.filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  // --------------------------------------------------------
+  // PREMIUM VISUAL THUMBNAIL RENDERER
+  // Automatically loads images/videos dynamically without forcing modal
+  // --------------------------------------------------------
+  const renderThumbnail = (file) => {
+    const previewUrl = `${baseUrl}/file/${file._id}/preview?token=${token}`;
+    const ext = file.filename.split('.').pop()?.toLowerCase() || '';
+    
+    if (file.category === 'Images') {
+      return (
+        <img 
+          src={previewUrl} 
+          alt={file.filename} 
+          style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: 'var(--radius-sm)' }} 
+        />
+      );
+    } else if (file.category === 'Videos') {
+      return (
+        <video 
+          preload="metadata" 
+          muted 
+          style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: 'var(--radius-sm)', backgroundColor: '#000' }}
+        >
+          <source src={previewUrl} type={file.mimeType} />
+        </video>
+      );
+    } else if (file.category === 'PDFs' || ext === 'pdf') {
+      return (
+        <div style={{ width: '100%', height: '140px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 'var(--radius-sm)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fca5a5' }}>
+          <FileText size={42} color="#ef4444" />
+          <span style={{ fontWeight: 800, marginTop: '0.75rem', letterSpacing: '0.08em', fontSize: '0.8rem', color: '#ef4444' }}>PDF DOCUMENT</span>
+        </div>
+      );
+    } else {
+      // Fallback big icon placeholder for Excel, Word, Audio, Zip
+      return (
+        <div style={{ width: '100%', height: '140px', backgroundColor: 'var(--bg-hover)', borderRadius: 'var(--radius-sm)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          {getFileIcon(file.category, file.filename, 48)}
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.75rem', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.05em' }}>
+            {ext || 'BINARY'} FILE
+          </span>
+        </div>
+      );
     }
   };
 
@@ -102,8 +142,8 @@ export default function FileExplorer({
                   padding: '0.35rem 0.65rem',
                   border: '1px solid',
                   borderColor: active ? 'var(--primary-blue)' : 'var(--border-color)',
-                  backgroundColor: active ? 'var(--primary-blue-light)' : 'var(--bg-card)',
-                  color: active ? 'var(--primary-blue)' : 'var(--text-main)',
+                  backgroundColor: active ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-card)',
+                  color: active ? 'var(--primary-blue-hover)' : 'var(--text-main)',
                   borderRadius: 'var(--radius-sm)',
                   fontSize: '0.8rem',
                   fontWeight: active ? 600 : 400,
@@ -117,11 +157,11 @@ export default function FileExplorer({
           })}
         </div>
 
-        {/* View Mode Switcher (Grid / List / Compact) */}
+        {/* View Mode Switcher */}
         <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-card)', overflow: 'hidden' }}>
           <button
             onClick={() => setViewMode('grid')}
-            title="Grid Cards View"
+            title="Gallery Thumbnails View"
             style={{ padding: '0.4rem 0.75rem', border: 'none', backgroundColor: viewMode === 'grid' ? 'var(--primary-blue)' : 'transparent', color: viewMode === 'grid' ? '#fff' : 'var(--text-muted)', cursor: 'pointer' }}
           >
             <Grid size={16} />
@@ -146,14 +186,14 @@ export default function FileExplorer({
 
       {isEmpty && (
         <div className="card flex-col flex-center" style={{ padding: '5rem 2rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-          <FolderIcon size={48} color="#cbd5e1" style={{ marginBottom: '1rem' }} />
+          <FolderIcon size={48} color="rgba(255,255,255,0.2)" style={{ marginBottom: '1rem' }} />
           <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)' }}>No files or folders found here</div>
           <div style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>Drag and drop documents above or create a directory folder to begin.</div>
         </div>
       )}
 
       {/* ========================================================
-          GRID CARDS VIEW MODE
+          THUMBNAIL GALLERY VIEW MODE (Requested Upgrade)
           ======================================================== */}
       {viewMode === 'grid' && !isEmpty && (
         <div className="grid-view">
@@ -163,56 +203,48 @@ export default function FileExplorer({
               key={folder._id}
               onClick={() => onSelectFolder(folder._id)}
               className="card card-hover"
-              style={{ padding: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#f8fafc', borderColor: '#cbd5e1' }}
+              style={{ padding: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'rgba(59, 130, 246, 0.05)', borderColor: 'rgba(59, 130, 246, 0.2)' }}
             >
               <FolderIcon size={26} color="var(--primary-blue)" style={{ flexShrink: 0 }} />
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {folder.name}
                 </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Directory</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--primary-blue)' }}>Open Directory →</div>
               </div>
             </div>
           ))}
 
-          {/* Files grid cards */}
+          {/* Media Thumbnail Grid Cards */}
           {files.map(file => (
-            <div key={file._id} className="card card-hover flex-col" style={{ justifyContent: 'space-between', minHeight: '160px' }}>
-              <div onClick={() => onOpenPreview(file)} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                  <div style={{ padding: '0.5rem', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-hover)' }}>
-                    {getFileIcon(file.category, file.filename)}
+            <div key={file._id} className="card card-hover flex-col" style={{ padding: '0.75rem', justifyContent: 'space-between' }}>
+              
+              <div onClick={() => onOpenPreview(file)} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {/* Filename header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: '0.5rem' }} title={file.filename}>
+                    {file.filename}
                   </div>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.2rem 0.5rem', backgroundColor: '#f1f5f9', color: 'var(--text-muted)', borderRadius: '9999px', textTransform: 'uppercase' }}>
-                    {file.category}
+                  <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '0.15rem 0.4rem', backgroundColor: 'rgba(255,255,255,0.1)', color: 'var(--text-muted)', borderRadius: '4px', textTransform: 'uppercase' }}>
+                    {formatSize(file.size)}
                   </span>
                 </div>
-                <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)', marginBottom: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={file.filename}>
-                  📄 {file.filename}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-light)', marginTop: '0.25rem' }}>
-                  <span>{formatSize(file.size)}</span>
-                  <span>{formatDate(file.uploadedAt)}</span>
+                
+                {/* Massive Live Thumbnail */}
+                <div style={{ width: '100%', borderRadius: 'var(--radius-sm)', overflow: 'hidden', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.1)' }}>
+                  {renderThumbnail(file)}
                 </div>
               </div>
 
-              {/* Card Action Buttons */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
-                <button
-                  onClick={() => onOpenPreview(file)}
-                  className="btn btn-primary"
-                  style={{ flex: 1, padding: '0.4rem', fontSize: '0.75rem', gap: '0.25rem' }}
-                  title="Direct browser preview (No download forced)"
-                >
-                  <Eye size={14} /> Open
-                </button>
+              {/* Card Action Buttons overlay */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
                 <button
                   onClick={() => handleDownload(file)}
-                  className="btn btn-secondary"
-                  style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}
-                  title="Download unmodified file"
+                  className="btn btn-primary"
+                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', gap: '0.35rem', borderRadius: '6px' }}
+                  title="Download File"
                 >
-                  <Download size={14} />
+                  <Download size={14} /> Download
                 </button>
               </div>
             </div>
@@ -243,7 +275,7 @@ export default function FileExplorer({
                     <span>{folder.name}</span>
                   </td>
                   <td style={{ color: 'var(--text-light)' }}>—</td>
-                  <td><span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', backgroundColor: '#f1f5f9', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>Directory</span></td>
+                  <td><span style={{ fontSize: '0.75rem', color: 'var(--primary-blue)', backgroundColor: 'rgba(59, 130, 246, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>Directory</span></td>
                   <td style={{ color: 'var(--text-muted)' }}>{formatDate(folder.createdAt)}</td>
                   <td style={{ textAlign: 'right' }}>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-light)', fontWeight: 500 }}>Open Folder →</span>
@@ -252,20 +284,21 @@ export default function FileExplorer({
               ))}
               {files.map(file => (
                 <tr key={file._id}>
-                  <td onClick={() => onOpenPreview(file)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.75rem', fontWeight: 500 }}>
-                    {getFileIcon(file.category, file.filename)}
-                    <span title={file.filename}>📄 {file.filename}</span>
+                  <td style={{ cursor: 'pointer' }} onClick={() => onOpenPreview(file)}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      {getFileIcon(file.category, file.filename, 20)}
+                      <span style={{ fontWeight: 500, color: 'var(--text-main)' }}>{file.filename}</span>
+                    </div>
                   </td>
-                  <td style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{formatSize(file.size)}</td>
-                  <td><span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>{file.category}</span></td>
-                  <td style={{ color: 'var(--text-muted)' }}>{formatDate(file.uploadedAt)}</td>
-                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button onClick={() => onOpenPreview(file)} className="btn btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', marginRight: '0.5rem' }}>
-                      <Eye size={13} /> Preview
-                    </button>
-                    <button onClick={() => handleDownload(file)} className="btn btn-primary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}>
-                      <Download size={13} /> Download
-                    </button>
+                  <td style={{ color: 'var(--text-light)', fontSize: '0.85rem' }}>{formatSize(file.size)}</td>
+                  <td><span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', backgroundColor: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>{file.category}</span></td>
+                  <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{formatDate(file.uploadedAt)}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                      <button onClick={() => handleDownload(file)} className="btn-icon" style={{ padding: '0.35rem' }} title="Download">
+                        <Download size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -275,44 +308,30 @@ export default function FileExplorer({
       )}
 
       {/* ========================================================
-          COMPACT VIEW MODE
+          COMPACT TILES VIEW MODE
           ======================================================== */}
       {viewMode === 'compact' && !isEmpty && (
-        <div className="compact-view">
+        <div className="compact-view" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.75rem', marginTop: '1rem' }}>
           {folders.map(folder => (
-            <div
-              key={folder._id}
-              onClick={() => onSelectFolder(folder._id)}
-              className="card card-hover"
-              style={{ padding: '0.6rem 0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }}
-            >
+            <div key={folder._id} onClick={() => onSelectFolder(folder._id)} className="card card-hover flex-row" style={{ padding: '0.75rem', cursor: 'pointer', backgroundColor: 'rgba(59, 130, 246, 0.05)' }}>
               <FolderIcon size={18} color="var(--primary-blue)" />
-              <span style={{ fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--primary-blue)' }}>
-                {folder.name}
-              </span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{folder.name}</span>
             </div>
           ))}
           {files.map(file => (
-            <div
-              key={file._id}
-              onClick={() => onOpenPreview(file)}
-              className="card card-hover"
-              style={{ padding: '0.6rem 0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}
-              title={`${file.filename} (${formatSize(file.size)}) - Click to preview`}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flex: 1 }}>
-                <span style={{ flexShrink: 0 }}>📄</span>
-                <span style={{ fontSize: '0.8rem', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-main)' }}>
-                  {file.filename}
-                </span>
+            <div key={file._id} className="card card-hover flex-col" style={{ padding: '0.75rem', justifyContent: 'center', textAlign: 'center', cursor: 'pointer' }}>
+              <div onClick={() => onOpenPreview(file)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                {getFileIcon(file.category, file.filename, 32)}
+                <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>{file.filename}</span>
               </div>
-              <button onClick={(e) => { e.stopPropagation(); handleDownload(file); }} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}>
-                <Download size={14} />
+              <button onClick={() => handleDownload(file)} className="btn btn-secondary" style={{ padding: '0.25rem', marginTop: '0.5rem', width: '100%', fontSize: '0.75rem' }}>
+                <Download size={12} style={{ marginRight: '0.25rem' }} /> Download
               </button>
             </div>
           ))}
         </div>
       )}
+
     </div>
   );
 }

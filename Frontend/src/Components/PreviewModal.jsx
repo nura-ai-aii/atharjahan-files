@@ -68,7 +68,7 @@ export default function PreviewModal({ file, onClose }) {
 
   if (!file) return null;
 
-  const baseUrl = import.meta.env.VITE_API_URL || '/api';
+  const baseUrl = import.meta.env.VITE_API_URL || 'https://atharjahan-files.onrender.com/api';
   const token = localStorage.getItem('pce_token');
   const previewUrl = `${baseUrl}/file/${file._id}/preview?token=${token}`;
   const ext = file.filename.split('.').pop()?.toLowerCase() || '';
