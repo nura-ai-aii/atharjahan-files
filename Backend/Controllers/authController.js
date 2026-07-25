@@ -52,7 +52,7 @@ export async function login(req, res) {
 
     // Seed admin user on initial boot if no users exist in database
     if (!adminUser) {
-      const defaultPassword = process.env.ADMIN_PASSWORD || 'mySecurePassword123';
+      const defaultPassword = process.env.ADMIN_PASSWORD || 'ATHARJAHAN';
       const salt = await bcrypt.genSalt(12);
       const passwordHash = await bcrypt.hash(defaultPassword, salt);
       adminUser = await User.create({ username: 'admin', passwordHash });
