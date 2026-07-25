@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, FilePlus, CheckCircle2, AlertTriangle, X, RefreshCw, Loader2, HardDrive, Clock } from 'lucide-react';
+import { Upload, FilePlus, CheckCircle2, AlertTriangle, X, RefreshCw, Loader2, HardDrive, Clock, Zap } from 'lucide-react';
 import api from '../utils/api.js';
 
 export default function UploadZone({ currentFolderId, onUploadComplete }) {
@@ -16,9 +16,14 @@ export default function UploadZone({ currentFolderId, onUploadComplete }) {
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
   };
 
-  const formatMb = (bytes) => {
-    if (!bytes || isNaN(bytes)) return '0.00 MB';
-    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  const formatTime = (seconds) => {
+    if (!seconds || !isFinite(seconds) || seconds < 1) return '< 1s';
+    if (seconds >= 60) {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.round(seconds % 60);
+      return `${mins}m ${secs}s`;
+    }
+    return `${Math.round(seconds)}s`;
   };
 
   const handleDrag = (e) => {
@@ -53,18 +58,27 @@ export default function UploadZone({ currentFolderId, onUploadComplete }) {
       progress: 0,
       loadedMb: '0.00',
       totalMb: formatSize(file.size),
+      speedMbs: '0.00 MB/s',
+      etaSeconds: null,
       status: 'queued', // queued, uploading, error, done, waiting_duplicate
       errorMessage: ''
     }));
 
-    // Add all items as 'queued' to prevent browser memory overload / white screen crashes when uploading >3GB
     setUploadQueue(prev => [...prev, ...newQueueItems]);
   };
 
-  // Sequential Upload Supervisor: Only stream 1 file at a time to keep RAM consumption very low!
+  // ADAPTIVE HIGH-SPEED UPLOAD SUPERVISOR
+  // Allows up to 4 concurrent network streams for fast batch saturation, scaling to 1 only when handling massive >250MB files!
   useEffect(() => {
-    const isUploadingOrWaiting = uploadQueue.some(q => q.status === 'uploading' || q.status === 'waiting_duplicate');
-    if (!isUploadingOrWaiting) {
+    const activeUploads = uploadQueue.filter(q => q.status === 'uploading');
+    const hasWaitingDuplicate = uploadQueue.some(q => q.status === 'waiting_duplicate');
+    if (hasWaitingDuplicate) return;
+
+    // Check if any currently active upload is very large (>= 250MB)
+    const hasHugeActive = activeUploads.some(q => q.file?.size >= 250 * 1024 * 1024);
+    const maxConcurrency = hasHugeActive ? 1 : 4; // Up to 4 simultaneous uploads for blazing speed!
+
+    if (activeUploads.length < maxConcurrency) {
       const nextItem = uploadQueue.find(q => q.status === 'queued');
       if (nextItem) {
         setUploadQueue(prev => prev.map(q => q.id === nextItem.id ? { ...q, status: 'uploading', progress: 1 } : q));
@@ -81,27 +95,51 @@ export default function UploadZone({ currentFolderId, onUploadComplete }) {
     }
     formData.append('duplicateAction', duplicateAction);
 
+    const startTime = Date.now();
+
     try {
       await api.post('/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
           const totalBytes = progressEvent.total || queueItem.file.size || 1;
-          const percentCompleted = Math.min(99, Math.round((progressEvent.loaded * 100) / totalBytes));
-          const loadedStr = formatSize(progressEvent.loaded).replace(/ (MB|GB)/, '');
+          const loadedBytes = progressEvent.loaded;
+          const percentCompleted = Math.min(99, Math.round((loadedBytes * 100) / totalBytes));
+          
+          const loadedStr = formatSize(loadedBytes).replace(/ (MB|GB)/, '');
           const totalStr = formatSize(totalBytes);
           
+          // Real-Time Speed & ETA Calculation
+          const elapsedSecs = Math.max(0.1, (Date.now() - startTime) / 1000);
+          const bytesPerSec = loadedBytes / elapsedSecs;
+          const speedStr = (bytesPerSec / (1024 * 1024)).toFixed(2) + ' MB/s';
+          const remainingSecs = (totalBytes - loadedBytes) / Math.max(1, bytesPerSec);
+
           setUploadQueue(prev => prev.map(q => 
-            q.id === queueItem.id ? { ...q, progress: percentCompleted, loadedMb: loadedStr, totalMb: totalStr } : q
+            q.id === queueItem.id ? { 
+              ...q, 
+              progress: percentCompleted, 
+              loadedMb: loadedStr, 
+              totalMb: totalStr,
+              speedMbs: speedStr,
+              etaSeconds: remainingSecs
+            } : q
           ));
         }
       });
 
       const finalStr = formatSize(queueItem.file.size);
-      setUploadQueue(prev => prev.map(q => q.id === queueItem.id ? { ...q, status: 'done', progress: 100, loadedMb: finalStr.replace(/ (MB|GB)/, ''), totalMb: finalStr } : q));
+      setUploadQueue(prev => prev.map(q => q.id === queueItem.id ? { 
+        ...q, 
+        status: 'done', 
+        progress: 100, 
+        loadedMb: finalStr.replace(/ (MB|GB)/, ''), 
+        totalMb: finalStr,
+        speedMbs: '⚡ Saved Instantly',
+        etaSeconds: 0
+      } : q));
       if (onUploadComplete) onUploadComplete();
     } catch (err) {
       if (err.response && err.response.status === 409) {
-        // SHA-256 Duplicate Checksum Match
         setUploadQueue(prev => prev.map(q => q.id === queueItem.id ? { ...q, status: 'waiting_duplicate' } : q));
         setDuplicateAlert({
           queueItem,
@@ -133,6 +171,7 @@ export default function UploadZone({ currentFolderId, onUploadComplete }) {
   };
 
   const activeOrQueuedCount = uploadQueue.filter(q => q.status === 'uploading' || q.status === 'queued').length;
+  const activeCount = uploadQueue.filter(q => q.status === 'uploading').length;
   const completedCount = uploadQueue.filter(q => q.status === 'done').length;
 
   // Master Batch Progress Calculation ("everything in percentage")
@@ -190,13 +229,13 @@ export default function UploadZone({ currentFolderId, onUploadComplete }) {
         </div>
         <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#1e293b' }}>
           {activeOrQueuedCount > 0 ? (
-            <span>Processing batch of {uploadQueue.length} files ({batchPercentage}% Complete)... Click to add more</span>
+            <span>🚀 High-Speed Batch Uploading ({activeCount} active workers | {batchPercentage}% Done)... Click to queue more</span>
           ) : (
             <span>Drag & Drop your files here or <span style={{ color: '#2563eb', textDecoration: 'underline' }}>Browse File Picker</span></span>
           )}
         </div>
-        <div style={{ fontSize: '0.785rem', color: '#64748b', marginTop: '0.35rem', fontWeight: 500 }}>
-          Sequential multi-file buffer ensures stable uploading for large multi-gigabyte (&gt;3GB) batches without browser freeze or white screen!
+        <div style={{ fontSize: '0.785rem', color: '#64748b', marginTop: '0.35rem', fontWeight: 600 }}>
+          ⚡ Powered by Zero-Copy server acceleration & 4x adaptive multi-streaming for maximum upload speed!
         </div>
       </div>
 
@@ -213,9 +252,9 @@ export default function UploadZone({ currentFolderId, onUploadComplete }) {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #334155', paddingBottom: '0.75rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-              <HardDrive size={22} color="#60a5fa" />
+              <Zap size={22} color="#f59e0b" fill="#f59e0b" />
               <span style={{ fontSize: '1rem', fontWeight: 800, color: '#f8fafc', letterSpacing: '0.03em' }}>
-                LIVE BATCH UPLOAD MONITOR ({activeOrQueuedCount} REMAINING)
+                SUPER-FAST BATCH UPLOAD MONITOR ({activeOrQueuedCount} REMAINING)
               </span>
             </div>
             <button
@@ -273,9 +312,10 @@ export default function UploadZone({ currentFolderId, onUploadComplete }) {
             </div>
           </div>
 
-          {/* Individual File Percentages & Queue Status */}
-          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Individual File Status & Percentage:
+          {/* Individual File Percentages & Speed Metrics */}
+          <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#cbd5e1', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', justifyContent: 'space-between' }}>
+            <span>Individual File Status & Percentage:</span>
+            <span style={{ color: '#60a5fa', textTransform: 'none' }}>⚡ Adaptive Multi-Stream Enabled</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem', maxHeight: '380px', overflowY: 'auto' }}>
             {uploadQueue.map((item, index) => (
@@ -296,7 +336,7 @@ export default function UploadZone({ currentFolderId, onUploadComplete }) {
                     <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 700, width: '28px' }}>
                       #{index + 1}
                     </span>
-                    <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '280px' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }}>
                       {item.file.name}
                     </span>
                     <span style={{ fontSize: '0.825rem', color: '#94a3b8', fontWeight: 600 }}>
@@ -304,20 +344,20 @@ export default function UploadZone({ currentFolderId, onUploadComplete }) {
                     </span>
                   </div>
 
-                  {/* Dynamic Percentage Readout for EVERY file */}
+                  {/* Dynamic Percentage, Velocity Readout & ETA for EVERY file */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     {item.status === 'queued' && (
                       <span style={{ backgroundColor: '#334155', color: '#cbd5e1', padding: '0.25rem 0.7rem', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <Clock size={15} color="#94a3b8" /> 0% (Waiting in line...)
+                        <Clock size={15} color="#94a3b8" /> 0% (In Queue...)
                       </span>
                     )}
                     {item.status === 'uploading' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#60a5fa' }}>
-                          {item.progress}%
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.785rem', backgroundColor: '#065f46', color: '#a7f3d0', padding: '0.2rem 0.55rem', borderRadius: '6px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          🚀 {item.speedMbs} | ETA: {formatTime(item.etaSeconds)}
                         </span>
-                        <span style={{ fontSize: '0.8rem', backgroundColor: '#1e3a8a', color: '#bfdbfe', padding: '0.25rem 0.7rem', borderRadius: '6px', fontWeight: 700 }}>
-                          ⏳ Actively Uploading ({item.progress}%)
+                        <span style={{ fontSize: '1.15rem', fontWeight: 900, color: '#60a5fa', minWidth: '42px', textAlign: 'right' }}>
+                          {item.progress}%
                         </span>
                       </div>
                     )}
