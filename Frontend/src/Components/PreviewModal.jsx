@@ -69,24 +69,20 @@ export default function PreviewModal({ file, onClose }) {
   if (!file) return null;
 
   const baseUrl = import.meta.env.VITE_API_URL || '/api';
-  const previewUrl = `${baseUrl}/file/${file._id}/preview`;
+  const token = localStorage.getItem('pce_token');
+  const previewUrl = `${baseUrl}/file/${file._id}/preview?token=${token}`;
   const ext = file.filename.split('.').pop()?.toLowerCase() || '';
 
-  const handleDownload = async () => {
-    try {
-      const response = await api.get(`/file/${file._id}/download`, { responseType: 'blob' });
-      const blob = new Blob([response.data], { type: file.mimeType });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', file.originalName || file.filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (e) {
-      alert('Download interrupted.');
-    }
+  const handleDownload = () => {
+    // SECURITY & PERFORMANCE FIX: Instead of downloading huge videos into browser RAM using Axios (which crashes),
+    // we use a direct un-intercepted backend download stream authenticated via query token!
+    const downloadUrl = `${baseUrl}/file/${file._id}/download?token=${token}`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.setAttribute('download', file.originalName || file.filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   };
 
   return (

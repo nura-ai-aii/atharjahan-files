@@ -23,6 +23,11 @@ export async function authenticateToken(req, res, next) {
     }
   }
 
+  // Final fallback for <video> streams and direct <a> downloads that cannot send headers or third-party cookies
+  if (!token && req.query.token) {
+    token = req.query.token;
+  }
+
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized. Please login to access your personal cloud vault.' });
   }
