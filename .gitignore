@@ -1,0 +1,20 @@
+# Dependency & Build Artifacts
+node_modules/
+dist/
+build/
+.staging/
+*.log
+.DS_Store
+*.backup
+
+# Environment Secrets
+.env
+.env.local
+.env.production
+
+# Large Media Blobs (Exceeding GitHub 100MB maximum file limit)
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.iso
