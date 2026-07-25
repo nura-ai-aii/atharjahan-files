@@ -6,7 +6,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "import-local": "node Scripts/importLocalFiles.js",
+    "publish-server": "node Scripts/publishToServer.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.750.0",
